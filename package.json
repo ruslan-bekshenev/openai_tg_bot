@@ -1,0 +1,27 @@
+{
+  "name": "walking_map",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "npx nodemon",
+    "build": "rimraf ./build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "19": "^0.0.0",
+    "dotenv": "^16.0.3",
+    "node-telegram-bot-api": "^0.61.0",
+    "openai": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/node-telegram-bot-api": "^0.61.6",
+    "nodemon": "^2.0.22",
+    "rimraf": "^4.4.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.3"
+  }
+}
