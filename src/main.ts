@@ -1,10 +1,6 @@
 import dotenv from 'dotenv'
 import { Configuration, OpenAIApi } from 'openai'
 import TelegramBot from 'node-telegram-bot-api'
-import fs from 'fs'
-import axios from 'axios'
-import sharp from 'sharp'
-import path from 'path'
 
 dotenv.config()
 
@@ -15,28 +11,26 @@ const openai = new OpenAIApi(configuration)
 
 const bot = new TelegramBot(process.env.TELEGRAM_API_KEY ?? '', { polling: true })
 
+const questionText = 'Задать вопрос'
+const imageText = 'Изображения'
+const endText = 'Завершить'
+let currentProcess: string | null = null
 async function generateImage(prompt: string) {
   return await openai.createImage({
     prompt,
-    n: 1,
+    n: 4,
     size: '1024x1024',
   })
 }
 
-async function generateEditImage(content: any) {
-  console.log(content)
-  // return await openai.createImageVariation({
-  //   model: 'image-alpha-001',
-  //   prompt: 'Anime',
-  //   n: 1,
-  //   image: {
-  //     n: 1,
-  //     content,
-  //     mime_type: 'image/jpeg',
-  //     size: '1024x1024',
-  //   },
-  // })
-}
+bot.onText(/\/start/, (msg, match) => {
+  const chatId = msg.chat.id
+  bot.sendMessage(chatId, 'Welcome', {
+    reply_markup: {
+      keyboard: [[{ text: questionText }], [{ text: imageText }]],
+    },
+  })
+})
 
 bot.onText(/\/q (.+)/, async (msg, match) => {
   const chatId = msg.chat.id
@@ -52,10 +46,9 @@ bot.onText(/\/q (.+)/, async (msg, match) => {
       presence_penalty: 0.2,
       stop: ['\n+'],
     })
-
-    console.log(completion.data.choices)
-
-    bot.sendMessage(chatId, completion.data?.choices?.[0]?.text ?? '')
+    completion.data?.choices?.forEach(({ text }) => {
+      bot.sendMessage(chatId, text ?? '')
+    })
   } catch (error: any) {
     if (error.response) {
       console.log(error.response.status)
@@ -67,14 +60,13 @@ bot.onText(/\/q (.+)/, async (msg, match) => {
 })
 
 bot.onText(/\/img (.+)/, async (msg, match) => {
-  console.log('test')
-  console.log
   const chatId = msg.chat.id
   const resp = match?.[1]
-  console.log(resp)
   try {
     const response = await generateImage(resp ?? '')
-    bot.sendMessage(chatId, response.data.data[0].url ?? '')
+    response.data?.data?.forEach(({ url }) => {
+      bot.sendMessage(chatId, url ?? '')
+    })
   } catch (error: any) {
     if (error.response) {
       console.log(error.response.status)
@@ -85,25 +77,61 @@ bot.onText(/\/img (.+)/, async (msg, match) => {
   }
 })
 
-bot.on('photo', async (msg) => {
-  let photo = ''
-  try {
-    const rs = fs.createReadStream(process.cwd() + '/src/cat.png', { encoding: 'base64' })
-    rs.on('data', async (data) => {
-      photo = data as string
+bot.on('message', async (msg) => {
+  if (msg.text === questionText) {
+    bot.sendMessage(msg.chat.id, 'Вы можете задать любой вопрос', {
+      reply_markup: {
+        remove_keyboard: true,
+      },
     })
-    const response = await openai.createImage({
-      prompt: `Камчатский суслик после работы`,
-      n: 4,
-      size: '256x256',
+    currentProcess = 'text'
+  }
+  if (msg.text === imageText) {
+    bot.sendMessage(msg.chat.id, 'Введите запрос для генерации изображения')
+    currentProcess = 'image'
+  }
+
+  if (msg.text === endText) {
+    currentProcess = null
+    bot.sendMessage(msg.chat.id, 'Для того чтобы продолжить взаимодействовать с ботом напишите /start', {
+      reply_markup: {
+        inline_keyboard: [[{ text: 'Завершить', callback_data: 'end' }]],
+      },
     })
-    console.log(response.data.data)
-  } catch (error: any) {
-    if (error.response) {
-      console.log(error.response.status)
-      console.log(error.response.data)
-    } else {
-      console.log(error.message)
+  }
+
+  if (msg.text !== questionText) {
+    if (currentProcess === 'text') {
+      const chatId = msg.chat.id
+      try {
+        const completion = await openai.createCompletion({
+          model: 'text-davinci-003',
+          prompt: msg.text,
+          temperature: 0.7,
+          max_tokens: 2500,
+          top_p: 1.0,
+          frequency_penalty: 0.2,
+          presence_penalty: 0.2,
+          stop: ['\n+'],
+        })
+        let fullText = ''
+        completion.data?.choices?.forEach(({ text }) => {
+          fullText += text + ' '
+        })
+
+        bot.sendMessage(chatId, fullText, {
+          reply_markup: {
+            inline_keyboard: [[{ text: 'Завершить', callback_data: 'end' }]],
+          },
+        })
+      } catch (error: any) {
+        if (error.response) {
+          console.log(error.response.status)
+          console.log(error.response.data)
+        } else {
+          console.log(error.message)
+        }
+      }
     }
   }
 })
