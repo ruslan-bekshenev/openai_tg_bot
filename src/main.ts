@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import { Configuration, OpenAIApi } from 'openai'
 import TelegramBot from 'node-telegram-bot-api'
+import { INLINE_MENU } from './constant/index.js'
 
 dotenv.config()
 
@@ -11,10 +12,8 @@ const openai = new OpenAIApi(configuration)
 
 const bot = new TelegramBot(process.env.TELEGRAM_API_KEY ?? '', { polling: true })
 
-const questionText = 'Задать вопрос'
-const imageText = 'Изображения'
-const endText = 'Завершить'
 let currentProcess: string | null = null
+
 async function generateImage(prompt: string) {
   return await openai.createImage({
     prompt,
@@ -23,114 +22,83 @@ async function generateImage(prompt: string) {
   })
 }
 
-bot.onText(/\/start/, (msg, match) => {
+bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id
-  bot.sendMessage(chatId, 'Welcome', {
+  bot.sendMessage(chatId, 'Добро пожаловать! Выберите категорию.', {
     reply_markup: {
-      keyboard: [[{ text: questionText }], [{ text: imageText }]],
+      inline_keyboard: [
+        [{ text: INLINE_MENU.question.name, callback_data: INLINE_MENU.question.value }],
+        [{ text: INLINE_MENU.image.name, callback_data: INLINE_MENU.image.value }],
+      ],
     },
   })
 })
 
-bot.onText(/\/q (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id
-  const resp = match?.[1]
-  try {
-    const completion = await openai.createCompletion({
-      model: 'text-davinci-003',
-      prompt: resp,
-      temperature: 0.7,
-      max_tokens: 2500,
-      top_p: 1.0,
-      frequency_penalty: 0.2,
-      presence_penalty: 0.2,
-      stop: ['\n+'],
-    })
-    completion.data?.choices?.forEach(({ text }) => {
-      bot.sendMessage(chatId, text ?? '')
-    })
-  } catch (error: any) {
-    if (error.response) {
-      console.log(error.response.status)
-      console.log(error.response.data)
-    } else {
-      console.log(error.message)
-    }
-  }
-})
-
-bot.onText(/\/img (.+)/, async (msg, match) => {
-  const chatId = msg.chat.id
-  const resp = match?.[1]
-  try {
-    const response = await generateImage(resp ?? '')
-    response.data?.data?.forEach(({ url }) => {
-      bot.sendMessage(chatId, url ?? '')
-    })
-  } catch (error: any) {
-    if (error.response) {
-      console.log(error.response.status)
-      console.log(error.response.data)
-    } else {
-      console.log(error.message)
-    }
-  }
+bot.on('callback_query', (callbackQuery) => {
+  const msg = callbackQuery.message
+  currentProcess = callbackQuery?.data !== 'end' ? callbackQuery?.data ?? null : null
+  bot
+    .answerCallbackQuery(callbackQuery.id)
+    .then(() =>
+      bot.sendMessage(
+        msg?.chat?.id ?? '',
+        currentProcess === 'question'
+          ? 'Можете задать любой вопрос'
+          : currentProcess === 'image'
+          ? 'Введите описание, бот нарисует для вас изображение. Описание лучше вводить на английском языке'
+          : 'Для того, чтобы взаимодействовать с ботом введите команду /start',
+      ),
+    )
 })
 
 bot.on('message', async (msg) => {
-  if (msg.text === questionText) {
-    bot.sendMessage(msg.chat.id, 'Вы можете задать любой вопрос', {
-      reply_markup: {
-        remove_keyboard: true,
-      },
-    })
-    currentProcess = 'text'
-  }
-  if (msg.text === imageText) {
-    bot.sendMessage(msg.chat.id, 'Введите запрос для генерации изображения')
-    currentProcess = 'image'
-  }
+  const chatId = msg.chat.id
+  console.log(currentProcess)
+  if (currentProcess === 'question') {
+    try {
+      const completion = await openai.createCompletion({
+        model: 'text-davinci-003',
+        prompt: msg.text,
+        temperature: 0.7,
+        max_tokens: 2500,
+        top_p: 1.0,
+        frequency_penalty: 0.2,
+        presence_penalty: 0.2,
+        stop: ['\n+'],
+      })
 
-  if (msg.text === endText) {
-    currentProcess = null
-    bot.sendMessage(msg.chat.id, 'Для того чтобы продолжить взаимодействовать с ботом напишите /start', {
-      reply_markup: {
-        inline_keyboard: [[{ text: 'Завершить', callback_data: 'end' }]],
-      },
-    })
+      bot.sendMessage(chatId, completion.data?.choices?.[0]?.text ?? '', {
+        reply_markup: {
+          inline_keyboard: [[{ text: 'Завершить', callback_data: 'end' }]],
+        },
+      })
+    } catch (error: any) {
+      if (error.response) {
+        console.log(error.response.status)
+        console.log(error.response.data)
+      } else {
+        console.log(error.message)
+      }
+    }
   }
-
-  if (msg.text !== questionText) {
-    if (currentProcess === 'text') {
-      const chatId = msg.chat.id
-      try {
-        const completion = await openai.createCompletion({
-          model: 'text-davinci-003',
-          prompt: msg.text,
-          temperature: 0.7,
-          max_tokens: 2500,
-          top_p: 1.0,
-          frequency_penalty: 0.2,
-          presence_penalty: 0.2,
-          stop: ['\n+'],
-        })
-        let fullText = ''
-        completion.data?.choices?.forEach(({ text }) => {
-          fullText += text + ' '
-        })
-
-        bot.sendMessage(chatId, fullText, {
-          reply_markup: {
-            inline_keyboard: [[{ text: 'Завершить', callback_data: 'end' }]],
-          },
-        })
-      } catch (error: any) {
-        if (error.response) {
-          console.log(error.response.status)
-          console.log(error.response.data)
-        } else {
-          console.log(error.message)
+  if (currentProcess === 'image') {
+    try {
+      const response = await generateImage(msg?.text ?? '')
+      response.data?.data?.forEach(({ url }) => {
+        bot.sendMessage(chatId, url ?? '')
+      })
+    } catch (error: any) {
+      if (error.response) {
+        console.log(error.response.status)
+        console.log(error.response.data)
+        if (error.response.data.error.code === 'rate_limit_exceeded') {
+          bot.sendMessage(chatId, 'Достигнут лимит для генерации изображений, подождите 1 минуту')
         }
+        if (error.response.status === 400) {
+          bot.sendMessage(chatId, 'Некорректный запрос')
+        }
+      } else {
+        console.log(error.message)
       }
     }
   }
