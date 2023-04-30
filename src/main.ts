@@ -17,8 +17,8 @@ let currentProcess: string | null = null
 async function generateImage(prompt: string) {
   return await openai.createImage({
     prompt,
-    n: 4,
-    size: '1024x1024',
+    n: 1,
+    size: '512x512',
   })
 }
 
@@ -53,7 +53,7 @@ bot.on('callback_query', (callbackQuery) => {
 
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id
-  console.log(currentProcess)
+  console.log('query: ', currentProcess, msg?.text)
   if (currentProcess === 'question') {
     try {
       const completion = await openai.createCompletion({
