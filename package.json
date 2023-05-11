@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "dotenv": "^16.0.3",
+    "midjourney-client": "^1.0.8",
     "node-telegram-bot-api": "^0.61.0",
     "openai": "^3.2.1"
   }

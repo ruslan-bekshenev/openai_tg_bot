@@ -2,6 +2,7 @@ import dotenv from 'dotenv'
 import { Configuration, OpenAIApi } from 'openai'
 import TelegramBot from 'node-telegram-bot-api'
 import { INLINE_MENU } from './constant/index.js'
+import midjourney from 'midjourney-client'
 
 dotenv.config()
 
@@ -83,10 +84,15 @@ bot.on('message', async (msg) => {
   }
   if (currentProcess === 'image') {
     try {
-      const response = await generateImage(msg?.text ?? '')
-      response.data?.data?.forEach(({ url }) => {
-        bot.sendMessage(chatId, url ?? '')
-      })
+      const response = await midjourney(msg?.text ?? '')
+      console.log(response)
+      if (response[0]) {
+        bot.sendMessage(chatId, response[0])
+      }
+      // const response = await generateImage(msg?.text ?? '')
+      // response.data?.data?.forEach(({ url }) => {
+      //   bot.sendMessage(chatId, url ?? '')
+      // })
     } catch (error: any) {
       if (error.response) {
         console.log(error.response.status)
